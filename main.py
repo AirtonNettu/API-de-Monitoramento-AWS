@@ -2,6 +2,10 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Path
 
+from app.servicos.monitoramento import (
+    analisar_memoria_ram,
+    classificar_utilizacao_cpu,
+)
 
 
 app = FastAPI(
@@ -16,79 +20,12 @@ PercentualCPU = Annotated[
     Path(
         ge=0,
         le=100,
-        title="Ultilização de CPU",
-        description="Percentual atual de utilização de CPU",
+        title="Utilização da CPU",
+        description="Percentual atual de utilização da CPU.",
         examples=[75.0],
     ),
 ]
 
-def classificar_utilizacao_cpu(utilizacao_cpu: float) -> str:
-    if utilizacao_cpu >= 90:
-        return "critico"
-    elif utilizacao_cpu >= 70:
-        return "alerta"
-    else:
-        return "normal"
-
-
-@app.get("/saude", summary="Verificar saúde da API")
-def verificar_saude() -> dict[str, str]:
-    return {"status": "online"}
-
-
-@app.get(
-    "/cpu/{utilizacao_cpu}",
-    summary="Classificar utilização da CPU",
-    response_description="Classificação atual da utilização da CPU"
-)
-
-
-def verificar_cpu(
-    utilizacao_cpu: PercentualCPU,
-) -> dict[str, float | str]:
-    classificacao = classificar_utilizacao_cpu(utilizacao_cpu)
-
-    resposta: dict[str, float | str] = {
-        "utilizacao_cpu": utilizacao_cpu,
-        "classificacao": classificacao,
-    }
-
-    return resposta
-
-
-def analisar_memoria_ram(
-        memoria_total_mb: int,
-        memoria_usada_mb: int,
-) -> dict[str, int | float | str]:
-    if memoria_total_mb <= 0:
-        raise ValueError("A memória total deve ser maior que zero.")
-    if memoria_usada_mb < 0:
-        raise ValueError("A memória usada não pode ser negativa.")
-    if memoria_usada_mb > memoria_total_mb:
-        raise ValueError("A memória usada não pode superar a memória total.")
-
-    memoria_livre_mb = memoria_total_mb - memoria_usada_mb
-
-    percentual_utilizado = round(
-        memoria_usada_mb / memoria_total_mb * 100, 
-        2,
-    )
-
-
-    if percentual_utilizado >= 90:
-        classificacao = "critico"
-    elif percentual_utilizado >= 70:
-        classificacao = "alerta"
-    else:
-        classificacao = "normal"
-
-    return {
-        "memoria_total_mb":memoria_total_mb,
-        "memoria_usada_mb":memoria_usada_mb,
-        "memoria_livre_mb": memoria_livre_mb,
-        "percentual_utilizado": percentual_utilizado,
-        "classificacao": classificacao,
-    }
 
 MemoriaTotalMB = Annotated[
     int,
@@ -96,9 +33,10 @@ MemoriaTotalMB = Annotated[
         gt=0,
         title="Memória total",
         description="Quantidade total de memória RAM em MB.",
-        example=[1024],
+        examples=[1024],
     ),
 ]
+
 
 MemoriaUsadaMB = Annotated[
     int,
@@ -110,16 +48,47 @@ MemoriaUsadaMB = Annotated[
     ),
 ]
 
+
+@app.get(
+    "/saude",
+    summary="Verificar saúde da API",
+    response_description="Estado atual da API",
+)
+def verificar_saude() -> dict[str, str]:
+    return {
+        "status": "online",
+    }
+
+
+@app.get(
+    "/cpu/{utilizacao_cpu}",
+    summary="Classificar utilização da CPU",
+    response_description="Classificação atual da utilização da CPU",
+)
+def verificar_cpu(
+    utilizacao_cpu: PercentualCPU,
+) -> dict[str, float | str]:
+    classificacao = classificar_utilizacao_cpu(
+        utilizacao_cpu,
+    )
+
+    resposta: dict[str, float | str] = {
+        "utilizacao_cpu": utilizacao_cpu,
+        "classificacao": classificacao,
+    }
+
+    return resposta
+
+
 @app.get(
     "/memoria/{memoria_total_mb}/{memoria_usada_mb}",
     summary="Analisar utilização da memória RAM",
-    response_description="Informações sobre o utilização da Memória RAM",
+    response_description="Informações sobre a utilização da memória RAM",
 )
-
 def verificar_memoria_ram(
     memoria_total_mb: MemoriaTotalMB,
     memoria_usada_mb: MemoriaUsadaMB,
-) -> dict[str, int | float| str]:
+) -> dict[str, int | float | str]:
     try:
         resposta = analisar_memoria_ram(
             memoria_total_mb,
@@ -131,5 +100,5 @@ def verificar_memoria_ram(
     except ValueError as erro:
         raise HTTPException(
             status_code=400,
-            details=str(erro),
+            detail=str(erro),
         ) from erro
